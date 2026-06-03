@@ -12,11 +12,18 @@ struct MainApp: App {
             isStoredInMemoryOnly: false,
             groupContainer: .identifier("group.com.app.memory")
         )
+        let createdContainer: ModelContainer
         do {
-            container = try ModelContainer(for: schema, configurations: [config])
+            createdContainer = try ModelContainer(for: schema, configurations: [config])
         } catch {
             fatalError("Could not initialize ModelContainer: \(error)")
         }
+        container = createdContainer
+
+        Task {
+            await MigrationService.shared.migrateIfNeeded(container: createdContainer)
+        }
+
         NotificationService.shared.requestAuthorization()
     }
 
