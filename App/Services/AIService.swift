@@ -62,6 +62,20 @@ actor AIService {
         ])
     }
 
+    func generateIcebreaker(context: [TopicSummary]) async throws -> String {
+        guard let provider else { throw LLMError.noConfig }
+        return try await provider.chat(messages: [LLMChatMessage(role: "system", content: "stub")])
+    }
+
+    func generateResponse(messages: [ChatMessage], context: [TopicSummary]?) async throws -> String {
+        guard let provider else { throw LLMError.noConfig }
+        return try await provider.chat(messages: [LLMChatMessage(role: "system", content: "stub")])
+    }
+
+    func summarize(dayChat: DayChat) async throws -> [TopicSummary] {
+        return []
+    }
+
     private func parseResponse(_ response: String) throws -> (summary: String, tags: [String]) {
         let cleaned = response
             .trimmingCharacters(in: .whitespacesAndNewlines)
