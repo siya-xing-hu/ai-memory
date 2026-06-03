@@ -156,12 +156,15 @@ actor AIService {
         return try parseResponse(response)
     }
 
-    func generateDailyReview(memories: [Memory]) async throws -> String {
+    func generateDailyReview(dayChat: DayChat) async throws -> String {
         guard let provider else {
             throw LLMError.noConfig
         }
 
-        let contents = memories.map { "- \($0.summary)" }.joined(separator: "\n")
+        let contents = dayChat.messages
+            .filter { $0.role == .user }
+            .map { "- \($0.content)" }
+            .joined(separator: "\n")
         let prompt = """
         请根据今日记录生成一份回顾总结。
 
