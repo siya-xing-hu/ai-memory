@@ -134,7 +134,7 @@ class DayChatStore: @unchecked Sendable {
     }
 
     private func fetchRelatedContext(for messages: [ChatMessage]) async throws -> [TopicSummary] {
-        let keywords = messages.flatMap { $0.content.split(separator: " ").map(String($0)) }
+        let keywords = messages.flatMap { $0.content.split(separator: " ").map { String($0) } }
         let descriptor = FetchDescriptor<TopicSummary>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
         let allTopics = try modelContext.fetch(descriptor)
         return allTopics.filter { topic in
