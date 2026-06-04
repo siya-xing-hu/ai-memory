@@ -1,0 +1,93 @@
+name: AI Memory
+options:
+  bundleIdPrefix: com.app
+  deploymentTarget:
+    iOS: "18.0"
+  xcodeVersion: "16.0"
+  generateEmptyDirectories: true
+
+targets:
+  AI Memory:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+        excludes:
+          - "**/*.entitlements"
+      - path: Intents
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.app.memory
+        INFOPLIST_FILE: App/Info.plist
+        CODE_SIGN_ENTITLEMENTS: App/App.entitlements
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: minimal
+        TARGETED_DEVICE_FAMILY: "1"
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: false
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: true
+        GENERATE_INFOPLIST_FILE: false
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: AI Memory
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        UILaunchStoryboardName: ""
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations:
+            UIWindowSceneSessionRoleApplication:
+              - UISceneConfigurationName: Default Configuration
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).SceneDelegate
+        UIRequiredDeviceCapabilities:
+          - armv7
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSMicrophoneUsageDescription: "语音记录需要访问麦克风，用于将语音转为文字"
+    entitlements:
+      path: App/App.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.app.memory
+
+  "AI Memory Share":
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Share
+        excludes:
+          - "**/*.entitlements"
+      - path: App/Models/DayChat.swift
+      - path: App/Models/ChatMessage.swift
+      - path: App/Models/TopicSummary.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.app.memory.share
+        INFOPLIST_FILE: Share/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Share/Share.entitlements
+        SWIFT_VERSION: "6.0"
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: false
+    info:
+      path: Share/Info.plist
+      properties:
+        CFBundleDisplayName: "AI Memory Share"
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        NSExtension:
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsText: true
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+              NSExtensionActivationSupportsWebPageWithMaxCount: 1
+          NSExtensionPrincipalClass: ShareViewController
+          NSExtensionPointIdentifier: com.apple.share-services
+    entitlements:
+      path: Share/Share.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.app.memory
+    dependencies:
+      - target: "AI Memory"
+        embed: false
