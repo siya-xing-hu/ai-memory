@@ -4,9 +4,8 @@ struct ChatInputBar: View {
     @Binding var text: String
     let onSend: () -> Void
     let onVoice: () -> Void
-    let onTriggerAI: () -> Void
-    let canTriggerAI: Bool
     let isLoading: Bool
+    @State private var showFullScreenEditor = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -26,14 +25,11 @@ struct ChatInputBar: View {
                     .background(Color(.systemGray6))
                     .cornerRadius(20)
 
-                if canTriggerAI {
-                    Button(action: onTriggerAI) {
-                        Image(systemName: "bubble.left.and.bubble.right.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(.green)
-                            .frame(width: 36, height: 36)
-                    }
-                    .disabled(isLoading)
+                Button(action: { showFullScreenEditor = true }) {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 18))
+                        .foregroundColor(.secondary)
+                        .frame(width: 36, height: 36)
                 }
 
                 Button(action: onSend) {
@@ -47,5 +43,8 @@ struct ChatInputBar: View {
             .padding(.vertical, 8)
         }
         .background(Color(.systemBackground))
+        .sheet(isPresented: $showFullScreenEditor) {
+            FullScreenTextEditor(text: $text)
+        }
     }
 }
