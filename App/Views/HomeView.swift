@@ -9,7 +9,6 @@ struct HomeView: View {
     @AppStorage("embedding_api_key") private var embeddingApiKey = ""
     @AppStorage("embedding_model") private var selectedEmbeddingModel = LLMEmbeddingModel.bigModel.rawValue
     @AppStorage("embedding_base_url") private var embeddingBaseURL = ""
-    @AppStorage("conversation_mode") private var conversationModeRaw = ConversationMode.batched.rawValue
     @State private var store: DayChatStore?
     @State private var inputText = ""
     @State private var isRecording = false
@@ -17,10 +16,6 @@ struct HomeView: View {
     @State private var showSettings = false
     @State private var showDailyReview = false
     @State private var icebreakerMessage: String? = nil
-
-    private var conversationMode: ConversationMode {
-        ConversationMode(rawValue: conversationModeRaw) ?? .batched
-    }
 
     var body: some View {
         Group {
@@ -88,8 +83,6 @@ struct HomeView: View {
                     text: $inputText,
                     onSend: { sendMessage(store: store) },
                     onVoice: { isRecording = true },
-                    onTriggerAI: { triggerAI(store: store) },
-                    canTriggerAI: conversationMode == .batched && hasPendingUserMessages(store: store),
                     isLoading: store.isLoading
                 )
             }
@@ -142,33 +135,12 @@ struct HomeView: View {
         return messages
     }
 
-    private func hasPendingUserMessages(store: DayChatStore) -> Bool {
-        guard let chat = store.currentDayChat else { return false }
-        let messages = chat.messages
-        var lastAIMessageIndex = -1
-        for (index, message) in messages.enumerated().reversed() {
-            if message.role == .ai {
-                lastAIMessageIndex = index
-                break
-            }
-        }
-        return messages.enumerated().contains { $0.offset > lastAIMessageIndex && $0.element.role == .user }
-    }
-
     private func sendMessage(store: DayChatStore) {
         guard !inputText.isEmpty else { return }
         let text = inputText
         inputText = ""
         store.addUserMessage(content: text)
 
-        if conversationMode == .interactive {
-            Task {
-                await store.triggerAIResponse()
-            }
-        }
-    }
-
-    private func triggerAI(store: DayChatStore) {
         Task {
             await store.triggerAIResponse()
         }
