@@ -10,7 +10,6 @@ struct SettingsView: View {
     @AppStorage("embedding_base_url") private var embeddingBaseURL = ""
     @AppStorage("daily_reminder_enabled") private var reminderEnabled = true
     @AppStorage("daily_review_enabled") private var reviewEnabled = true
-    @AppStorage("conversation_mode") private var conversationModeRaw = ConversationMode.batched.rawValue
     @State private var chatTestResult: String?
     @State private var embeddingTestResult: String?
     @State private var isTestingChat = false
@@ -104,15 +103,6 @@ struct SettingsView: View {
                             NotificationService.shared.scheduleDailyReminder()
                         }
                     }
-                }
-
-                Section("对话") {
-                    Picker("对话模式", selection: $conversationModeRaw) {
-                        ForEach(ConversationMode.allCases) { mode in
-                            Text(mode.displayName).tag(mode.rawValue)
-                        }
-                    }
-                    .pickerStyle(.segmented)
                 }
 
                 Section("关于") {
