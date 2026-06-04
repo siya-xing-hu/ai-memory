@@ -88,12 +88,12 @@ class DayChatStore: @unchecked Sendable {
     }
 
     func messagesForToday() -> [ChatMessage] {
-        currentDayChat?.messages ?? []
+        currentDayChat?.messages.sorted(by: { $0.createdAt < $1.createdAt }) ?? []
     }
 
     // MARK: - AI Response
 
-    func triggerAIResponse(mode: ConversationMode) async {
+    func triggerAIResponse() async {
         guard await AIService.shared.isConfigured() else { return }
         guard let chat = currentDayChat else { return }
 

@@ -163,14 +163,14 @@ struct HomeView: View {
 
         if conversationMode == .interactive {
             Task {
-                await store.triggerAIResponse(mode: .interactive)
+                await store.triggerAIResponse()
             }
         }
     }
 
     private func triggerAI(store: DayChatStore) {
         Task {
-            await store.triggerAIResponse(mode: .batched)
+            await store.triggerAIResponse()
         }
     }
 }
