@@ -58,6 +58,7 @@ struct LLMConfig: Codable {
 
 protocol LLMProvider: Sendable {
     func chat(messages: [LLMChatMessage]) async throws -> String
+    func stream(messages: [LLMChatMessage]) -> AsyncThrowingStream<String, Error>
     func embed(text: String) async throws -> [Double]
 }
 
@@ -97,7 +98,7 @@ enum LLMResponseParser {
 
 actor UnifiedLLMProvider: LLMProvider {
     private let config: LLMConfig
-    private let type: LLMProviderType
+    nonisolated let type: LLMProviderType
     private let urlSession: URLSession
 
     init(config: LLMConfig, type: LLMProviderType) {
@@ -112,6 +113,25 @@ actor UnifiedLLMProvider: LLMProvider {
             return try await customChat(messages: messages)
         case .bigModel:
             throw LLMError.invalidConfig("BigModel provider only supports embeddings")
+        }
+    }
+
+    nonisolated func stream(messages: [LLMChatMessage]) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    switch self.type {
+                    case .custom:
+                        try await self.customStream(messages: messages, continuation: continuation)
+                    case .bigModel:
+                        throw LLMError.invalidConfig("BigModel provider only supports embeddings")
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
         }
     }
 
@@ -160,6 +180,82 @@ actor UnifiedLLMProvider: LLMProvider {
         }
         AppLogger.embedding.info("Embedding request succeeded. dimensions=\(embedding.count)")
         return embedding
+    }
+
+    private func customStream(messages: [LLMChatMessage], continuation: AsyncThrowingStream<String, Error>.Continuation) async throws {
+        let baseURL = config.baseURL ?? "https://token-hub.pinpula.com"
+        guard let url = URL(string: "\(baseURL)/v1/messages") else {
+            AppLogger.ai.error("Invalid chat endpoint. baseURL=\(baseURL, privacy: .public)")
+            throw LLMError.invalidConfig("URL 格式不正确")
+        }
+        AppLogger.ai.info("Stream request started. model=\(self.config.model, privacy: .public), messagesCount=\(messages.count)")
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue(config.apiKey, forHTTPHeaderField: "x-api-key")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+
+        var systemMessage: String?
+        let chatMessages = messages.compactMap { msg -> [String: String]? in
+            if msg.role == "system" {
+                systemMessage = msg.content
+                return nil
+            }
+            return ["role": msg.role == "user" ? "user" : "assistant", "content": msg.content]
+        }
+
+        var body: [String: Any] = [
+            "model": config.model,
+            "messages": chatMessages,
+            "max_tokens": 4096,
+            "temperature": 0.3,
+            "stream": true
+        ]
+        if let system = systemMessage {
+            body["system"] = system
+        }
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (bytes, response) = try await urlSession.bytes(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+            AppLogger.ai.error("Stream request failed. statusCode=\(statusCode)")
+            throw LLMError.apiError("HTTP \(statusCode)")
+        }
+
+        var totalLength = 0
+        for try await line in bytes.lines {
+            try Task.checkCancellation()
+            guard line.hasPrefix("data:") else { continue }
+            let payload = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
+            if payload.isEmpty || payload == "[DONE]" { continue }
+            guard let data = payload.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                continue
+            }
+
+            if let type = json["type"] as? String {
+                if type == "content_block_delta",
+                   let delta = json["delta"] as? [String: Any],
+                   let text = delta["text"] as? String {
+                    totalLength += text.count
+                    continuation.yield(text)
+                } else if type == "message_stop" {
+                    break
+                }
+                continue
+            }
+
+            if let choices = json["choices"] as? [[String: Any]],
+               let first = choices.first,
+               let delta = first["delta"] as? [String: Any],
+               let text = delta["content"] as? String {
+                totalLength += text.count
+                continuation.yield(text)
+            }
+        }
+        AppLogger.ai.info("Stream request succeeded. totalLength=\(totalLength)")
     }
 
     private func customChat(messages: [LLMChatMessage]) async throws -> String {

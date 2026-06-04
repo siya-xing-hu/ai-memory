@@ -2,8 +2,25 @@
 #
 # gitignore contributors: remember to update Global/Xcode.gitignore, Objective-C.gitignore & Swift.gitignore
 
+# macOS
+.DS_Store
+
+# Local agent/editor config
+.claude/
+
+# Local-only debug and test scratch files
+AppTests/
+Tests/
+
 ## User settings
 xcuserdata/
+*.xcuserstate
+
+## Build output
+DerivedData/
+.DerivedData/
+build/
+*.xcresult
 
 ## Obj-C/Swift specific
 *.hmap
@@ -30,6 +47,9 @@ playground.xcworkspace
 # .swiftpm
 
 .build/
+
+# Generated from project.yml via XcodeGen
+AI Memory.xcodeproj/
 
 # CocoaPods
 #

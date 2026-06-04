@@ -82,6 +82,43 @@ actor AIService {
         ])
     }
 
+    func generateStream(messages: [ChatMessage], context: [TopicSummary]?) -> AsyncThrowingStream<String, Error> {
+        guard let provider else {
+            return AsyncThrowingStream { $0.finish(throwing: LLMError.noConfig) }
+        }
+
+        let userMessages = messages
+            .filter { $0.role == .user }
+            .map { "- [\(timeString($0.createdAt))] \($0.content)" }
+            .joined(separator: "\n")
+
+        let contextText = context?.map { "- \($0.title): \($0.summary)" }.joined(separator: "\n") ?? ""
+
+        let prompt = """
+        你是一个思维发散助手，帮助用户整理和延伸思路。
+        你绝对不能提供知识性回答。你的任务是：
+        1. 通过提问帮助用户理清自己的思路
+        2. 把用户当前的想法和他过去记录中的相关话题联系起来
+        3. 引导用户深入思考同一话题的层次
+
+        规则：
+        - 不回答"怎么做"类问题，而是反问"为什么想做"或"之前是否接触过"
+        - 每次回复只提 1-2 个相关问题，保持简洁（50字以内）
+        - 如果用户只是记录事实（无提问），帮他联系历史记忆或提示遗漏角度
+        - 语气像朋友聊天，不要像老师讲课
+
+        \(contextText.isEmpty ? "" : "\n相关历史记忆：\n" + contextText)
+
+        用户今日记录：
+        \(userMessages)
+        """
+
+        return provider.stream(messages: [
+            LLMChatMessage(role: "system", content: "你是一个思维发散助手。只输出回复内容，不输出其他。"),
+            LLMChatMessage(role: "user", content: prompt)
+        ])
+    }
+
     // MARK: - Summarization
 
     func summarize(dayChat: DayChat) async throws -> [TopicSummary] {

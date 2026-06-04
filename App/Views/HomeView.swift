@@ -12,9 +12,8 @@ struct HomeView: View {
     @State private var store: DayChatStore?
     @State private var inputText = ""
     @State private var isRecording = false
-    @State private var showSearch = false
+    @State private var showCalendar = false
     @State private var showSettings = false
-    @State private var showDailyReview = false
     @State private var icebreakerMessage: String? = nil
 
     var body: some View {
@@ -89,8 +88,8 @@ struct HomeView: View {
             .navigationTitle("AI Memory")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(action: { showDailyReview = true }) {
-                        Label("回顾", systemImage: "sparkles")
+                    Button(action: { showCalendar = true }) {
+                        Image(systemName: "calendar")
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -98,20 +97,12 @@ struct HomeView: View {
                         Image(systemName: "gear")
                     }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: { showSearch = true }) {
-                        Image(systemName: "magnifyingglass")
-                    }
-                }
             }
-            .sheet(isPresented: $showSearch) {
-                SearchView(store: store)
+            .sheet(isPresented: $showCalendar) {
+                CalendarView(store: store)
             }
             .sheet(isPresented: $showSettings) {
                 SettingsView()
-            }
-            .sheet(isPresented: $showDailyReview) {
-                DailyReviewView(store: store)
             }
             .sheet(isPresented: $isRecording) {
                 VoiceRecordView { text in

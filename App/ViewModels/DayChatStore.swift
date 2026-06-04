@@ -48,6 +48,17 @@ class DayChatStore: @unchecked Sendable {
         dayChat(for: date) != nil
     }
 
+    func datesWithChats() -> Set<Date> {
+        let descriptor = FetchDescriptor<DayChat>(sortBy: [SortDescriptor(\.date, order: .reverse)])
+        do {
+            let chats = try modelContext.fetch(descriptor)
+            return Set(chats.map { $0.date })
+        } catch {
+            AppLogger.storage.error("Fetch dates with chats failed: \(error.localizedDescription, privacy: .public)")
+            return []
+        }
+    }
+
     // MARK: - Messages
 
     func addUserMessage(content: String) {
@@ -64,6 +75,7 @@ class DayChatStore: @unchecked Sendable {
         let message = ChatMessage(role: .user, content: content)
         chat.messages.append(message)
         chat.updatedAt = Date()
+        currentDayChat = chat
 
         do {
             try modelContext.save()
@@ -79,6 +91,7 @@ class DayChatStore: @unchecked Sendable {
         let message = ChatMessage(role: .ai, content: content)
         chat.messages.append(message)
         chat.updatedAt = Date()
+        currentDayChat = chat
 
         do {
             try modelContext.save()
@@ -103,18 +116,38 @@ class DayChatStore: @unchecked Sendable {
         isLoading = true
         defer { isLoading = false }
 
+        // Create empty AI message immediately for streaming
+        let aiMessage = ChatMessage(role: .ai, content: "")
+        chat.messages.append(aiMessage)
+        chat.updatedAt = Date()
+        currentDayChat = chat
+        try? modelContext.save()
+
         do {
             let context = try await fetchRelatedContext(for: pendingMessages)
-            let response = try await AIService.shared.generateResponse(
+            let stream = await AIService.shared.generateStream(
                 messages: pendingMessages,
                 context: context
             )
-            await MainActor.run {
-                addAIMessage(content: response)
+            var fullText = ""
+            for try await chunk in stream {
+                fullText += chunk
+                await MainActor.run {
+                    aiMessage.content = fullText
+                    chat.updatedAt = Date()
+                    currentDayChat = chat
+                    try? modelContext.save()
+                }
             }
         } catch {
             AppLogger.ai.error("AI response failed: \(error.localizedDescription, privacy: .public)")
             errorMessage = "AI 回复失败"
+            await MainActor.run {
+                aiMessage.content = "AI 回复失败"
+                chat.updatedAt = Date()
+                currentDayChat = chat
+                try? modelContext.save()
+            }
         }
     }
 
@@ -206,15 +239,6 @@ class DayChatStore: @unchecked Sendable {
         let descriptor = FetchDescriptor<TopicSummary>(
             sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
         )
-        do {
-            let allTopics = try modelContext.fetch(descriptor)
-            searchResults = allTopics.filter {
-                $0.title.localizedCaseInsensitiveContains(query) ||
-                $0.summary.localizedCaseInsensitiveContains(query)
-            }
-        } catch {
-            AppLogger.storage.error("Search failed: \(error.localizedDescription, privacy: .public)")
-        }
 
         if await EmbeddingService.shared.provider != nil {
             do {
@@ -225,17 +249,24 @@ class DayChatStore: @unchecked Sendable {
                     let score = EmbeddingService.shared.cosineSimilarity(queryEmbedding, emb)
                     return (topic, score)
                 }
-                let semanticResults = scored.sorted { $0.score > $1.score }
-                    .filter { $0.score > 0.7 }
+                searchResults = scored.sorted { $0.score > $1.score }
+                    .prefix(10)
                     .map { $0.topic }
-
-                let keywordSet = Set(searchResults.map { $0.id })
-                for topic in semanticResults where !keywordSet.contains(topic.id) {
-                    searchResults.append(topic)
-                }
+                return
             } catch {
                 AppLogger.embedding.error("Semantic search failed: \(error.localizedDescription, privacy: .public)")
             }
+        }
+
+        do {
+            let allTopics = try modelContext.fetch(descriptor)
+            searchResults = Array(allTopics.filter {
+                $0.title.localizedCaseInsensitiveContains(query) ||
+                $0.summary.localizedCaseInsensitiveContains(query)
+            }.prefix(10))
+        } catch {
+            AppLogger.storage.error("Search failed: \(error.localizedDescription, privacy: .public)")
+            searchResults = []
         }
     }
 
