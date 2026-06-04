@@ -294,17 +294,3 @@ class DayChatStore: @unchecked Sendable {
         }
     }
 }
-
-enum ConversationMode: String, CaseIterable, Identifiable {
-    case batched = "batched"
-    case interactive = "interactive"
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .batched: return "批量响应"
-        case .interactive: return "交互问答"
-        }
-    }
-}
