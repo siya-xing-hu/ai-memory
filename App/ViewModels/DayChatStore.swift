@@ -106,12 +106,24 @@ class DayChatStore: @unchecked Sendable {
 
     // MARK: - AI Response
 
+    @MainActor
     func triggerAIResponse() async {
-        guard await AIService.shared.isConfigured() else { return }
-        guard let chat = currentDayChat else { return }
+        AppLogger.ai.info("triggerAIResponse started")
+        guard await AIService.shared.isConfigured() else {
+            AppLogger.ai.error("AI not configured, skipping response")
+            return
+        }
+        guard let chat = currentDayChat else {
+            AppLogger.ai.error("currentDayChat is nil, skipping response")
+            return
+        }
 
         let pendingMessages = pendingUserMessages()
-        guard !pendingMessages.isEmpty else { return }
+        AppLogger.ai.info("pendingMessages count=\(pendingMessages.count)")
+        guard !pendingMessages.isEmpty else {
+            AppLogger.ai.error("pendingMessages is empty, skipping response")
+            return
+        }
 
         isLoading = true
         defer { isLoading = false }
@@ -122,38 +134,50 @@ class DayChatStore: @unchecked Sendable {
         chat.updatedAt = Date()
         currentDayChat = chat
         try? modelContext.save()
+        AppLogger.ai.info("Empty AI message created and saved")
 
         do {
             let context = try await fetchRelatedContext(for: pendingMessages)
+            AppLogger.ai.info("Fetched related context count=\(context.count)")
+            let conversationHistory = Array(chat.messages.dropLast())
+            AppLogger.ai.info("Conversation history count=\(conversationHistory.count)")
             let stream = await AIService.shared.generateStream(
-                messages: pendingMessages,
+                messages: conversationHistory,
                 context: context
             )
+            AppLogger.ai.info("Stream created, starting consumption")
             var fullText = ""
+            var chunkCount = 0
             for try await chunk in stream {
+                chunkCount += 1
                 fullText += chunk
-                await MainActor.run {
-                    aiMessage.content = fullText
-                    chat.updatedAt = Date()
-                    currentDayChat = chat
-                    try? modelContext.save()
-                }
-            }
-        } catch {
-            AppLogger.ai.error("AI response failed: \(error.localizedDescription, privacy: .public)")
-            errorMessage = "AI 回复失败"
-            await MainActor.run {
-                aiMessage.content = "AI 回复失败"
+                aiMessage.content = fullText
                 chat.updatedAt = Date()
                 currentDayChat = chat
                 try? modelContext.save()
+                AppLogger.ai.info("Received chunk #\(chunkCount), length=\(chunk.count), total=\(fullText.count)")
             }
+            AppLogger.ai.info("Stream consumption complete. chunks=\(chunkCount), totalLength=\(fullText.count)")
+        } catch {
+            AppLogger.ai.error("AI response failed: \(error.localizedDescription, privacy: .public)")
+            errorMessage = "AI 回复失败"
+            aiMessage.content = "AI 回复失败"
+            chat.updatedAt = Date()
+            currentDayChat = chat
+            try? modelContext.save()
         }
     }
 
     private func pendingUserMessages() -> [ChatMessage] {
-        guard let chat = currentDayChat else { return [] }
+        guard let chat = currentDayChat else {
+            AppLogger.ai.error("pendingUserMessages: currentDayChat is nil")
+            return []
+        }
         let messages = chat.messages
+        AppLogger.ai.info("pendingUserMessages: total messages count=\(messages.count)")
+        for (i, m) in messages.enumerated() {
+            AppLogger.ai.info("  [\(i)] role=\(m.role.rawValue), content=\(m.content.prefix(30))")
+        }
         var lastAIMessageIndex = -1
         for (index, message) in messages.enumerated().reversed() {
             if message.role == .ai {
@@ -161,9 +185,12 @@ class DayChatStore: @unchecked Sendable {
                 break
             }
         }
-        return messages.enumerated()
+        AppLogger.ai.info("pendingUserMessages: lastAIMessageIndex=\(lastAIMessageIndex)")
+        let result = messages.enumerated()
             .filter { $0.offset > lastAIMessageIndex && $0.element.role == .user }
             .map { $0.element }
+        AppLogger.ai.info("pendingUserMessages: result count=\(result.count)")
+        return result
     }
 
     private func fetchRelatedContext(for messages: [ChatMessage]) async throws -> [TopicSummary] {

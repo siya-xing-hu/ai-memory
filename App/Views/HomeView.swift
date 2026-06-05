@@ -47,8 +47,8 @@ struct HomeView: View {
                 )
             }
 
-            await store?.summarizePendingDayChats()
             await generateIcebreakerIfNeeded()
+            await store?.summarizePendingDayChats()
         }
     }
 
